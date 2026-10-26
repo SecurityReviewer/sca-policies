@@ -1,0 +1,264 @@
+# Security Configuration Assessment
+# Static security analysis of an Android APK (Cyber Reviewer)
+#
+# No agent runs on the device: the APK is extracted (adb pull, build artifact or store download) and
+# stored on an agent host at /var/ossec/var/apk-static/app.apk. This policy runs /var/ossec/wodles/apk-static/apk_check.py
+# (stdlib-only static checks, see apk_check.py) and reports each check as Passed/Failed.
+# Findings are heuristics on manifest/bytecode strings, referenced to OWASP MASVS.
+
+policy:
+  id: "android_apk_static"
+  file: "android_apk_static.yml"
+  name: "Android APK static security analysis (OWASP MASVS)"
+  description: "Static checks on an Android APK: manifest hardening, exported components, permissions, signing, hardcoded secrets and risky APIs."
+  references:
+    - https://mas.owasp.org/MASVS/
+    - https://developer.android.com/topic/security/best-practices
+
+requirements:
+  name: "Check that the APK to analyse is present"
+  description: "The APK is expected at /var/ossec/var/apk-static/app.apk."
+  condition: all
+  rules:
+    - 'f:/var/ossec/var/apk-static/app.apk'
+
+checks:
+  - id: 60001
+    name: "Ensure the application is not debuggable"
+    description: "android:debuggable must not be true in a release build."
+    rationale: "A debuggable app lets anyone attach a debugger, read memory and bypass client-side controls."
+    remediation: "Remove android:debuggable or set it to false for release builds."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-RESILIENCE-2"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py debuggable /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60002
+    name: "Ensure application data backup is disabled"
+    description: "android:allowBackup should be false (default is true when unset)."
+    rationale: "Backups expose app data (tokens, databases) through adb backup / cloud backup."
+    remediation: "Set android:allowBackup=\"false\" or restrict with fullBackupContent/dataExtractionRules."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-STORAGE-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py allow_backup /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60003
+    name: "Ensure cleartext (HTTP) traffic is not permitted"
+    description: "android:usesCleartextTraffic must not be true."
+    rationale: "Cleartext traffic can be intercepted or modified by a network attacker."
+    remediation: "Set usesCleartextTraffic=\"false\" and use a network security config that enforces TLS."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-NETWORK-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py cleartext_traffic /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60004
+    name: "Ensure the application is not flagged testOnly"
+    description: "android:testOnly must not be set in release builds."
+    rationale: "testOnly builds are intended for development and may bypass release protections."
+    remediation: "Rebuild without android:testOnly."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-CODE-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py test_only /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60005
+    name: "Ensure no activity, service or receiver is exported without a permission"
+    description: "Components with an intent-filter (or exported=true) and no android:permission can be invoked by any app."
+    rationale: "Unprotected exported components allow intent injection, data exfiltration and privilege abuse by other apps."
+    remediation: "Set android:exported=\"false\" or protect the component with a signature-level permission."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-PLATFORM-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py exported_components /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60006
+    name: "Ensure no content provider is exported without a permission"
+    description: "Exported content providers without read/write permission expose their data to every app."
+    rationale: "Unprotected providers allow reading and modifying app data and SQL injection through URIs."
+    remediation: "Set android:exported=\"false\" or define readPermission/writePermission (signature level)."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-PLATFORM-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py exported_providers /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60007
+    name: "Ensure targetSdkVersion is current (>= 34)"
+    description: "targetSdkVersion should target a recent Android release."
+    rationale: "Apps targeting old API levels run with legacy, weaker security behaviours."
+    remediation: "Raise targetSdkVersion to 34 or higher and retest."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-CODE-3"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py target_sdk /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60008
+    name: "Ensure minSdkVersion is not obsolete (>= 26)"
+    description: "minSdkVersion below 26 keeps support for Android versions without current platform protections."
+    rationale: "Old Android versions lack fixes and hardening the app cannot compensate for."
+    remediation: "Raise minSdkVersion to 26 or higher where business allows."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-CODE-3"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py min_sdk /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60009
+    name: "Ensure no high-risk permissions are requested unnecessarily"
+    description: "Permissions such as SMS, contacts, call log, storage, overlay or install-packages give broad access to user data."
+    rationale: "Excess permissions increase impact if the app is abused or compromised and raise privacy (GDPR) exposure."
+    remediation: "Remove permissions that are not strictly required; document the justification for those kept."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-PRIVACY-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py dangerous_permissions /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60010
+    name: "Ensure the APK is signed with signature scheme v2 or later"
+    description: "APKs signed only with the v1 (JAR) scheme are vulnerable to tampering (e.g. Janus, CVE-2017-13156)."
+    rationale: "A weak signature scheme allows modified code to keep a valid signature."
+    remediation: "Sign with apksigner using v2/v3/v4 schemes."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-RESILIENCE-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py signature_scheme /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60011
+    name: "Ensure no cleartext http:// URLs are hardcoded"
+    description: "Hardcoded http:// endpoints in code or resources."
+    rationale: "Cleartext endpoints leak data and credentials and are trivially intercepted."
+    remediation: "Replace with https:// endpoints and remove unused URLs."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-NETWORK-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py http_urls /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60012
+    name: "Ensure no secrets are hardcoded in code or resources"
+    description: "Heuristic scan for access keys, private keys and credential-like literals."
+    rationale: "Secrets embedded in an APK are trivially extracted by decompiling it."
+    remediation: "Move secrets to a backend or the Android Keystore; rotate any exposed credential."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-STORAGE-2"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py hardcoded_secrets /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60013
+    name: "Ensure WebView JavaScript interfaces are not used"
+    description: "WebView.addJavascriptInterface exposes native methods to web content."
+    rationale: "Injected or malicious web content can call native code."
+    remediation: "Avoid addJavascriptInterface; if required, restrict to trusted origins and annotate with @JavascriptInterface."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-PLATFORM-2"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py js_interface /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60014
+    name: "Ensure no dynamic code loading or command execution is used"
+    description: "DexClassLoader / Runtime.exec references."
+    rationale: "Loading code at runtime or executing commands can bypass review and enable code injection."
+    remediation: "Remove dynamic loading and process execution, or verify the integrity of any loaded code."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-CODE-4"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py dynamic_code /var/ossec/var/apk-static/app.apk -> r:^PASS'
+
+  - id: 60015
+    name: "Ensure weak cryptographic algorithms are not referenced"
+    description: "DES, 3DES, ECB mode, MD5 or SHA-1 strings in code."
+    rationale: "Weak algorithms do not provide adequate confidentiality or integrity."
+    remediation: "Use AES-GCM, SHA-256 or stronger, and keys from the Android Keystore."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.28", "A.8.26"]
+      nis2: ["21.2.e"]
+    references:
+      - https://mas.owasp.org/MASVS/
+      - "OWASP MASVS-CRYPTO-1"
+    condition: all
+    rules:
+      - 'c:python3 /var/ossec/wodles/apk-static/apk_check.py weak_crypto /var/ossec/var/apk-static/app.apk -> r:^PASS'

@@ -1,0 +1,412 @@
+# Security Configuration Assessment
+# Microsoft Office 2013 hardening (Cyber Reviewer)
+#
+# Registry checks of the machine-wide Office policy keys (HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\). A missing key means the
+# setting is not enforced by policy and the check fails. This is an original policy based on the Microsoft Office
+# security baseline guidance; it is not a CIS Benchmark.
+
+policy:
+  id: "ms_office_2013"
+  file: "ms_office_2013.yml"
+  name: "Microsoft Office 2013 hardening (macros, Protected View, DDE, ActiveX, updates)"
+  description: "Machine-wide policy checks for Word, Excel, PowerPoint and Outlook 2013."
+  references:
+    - https://learn.microsoft.com/en-us/deployoffice/security/
+
+requirements:
+  name: "Check that Microsoft Office 2013 is installed"
+  description: "Office 15.0 (MSI or Click-to-Run, 32 or 64 bit). File rules cover installs that a 32-bit agent cannot see in the 64-bit registry view."
+  condition: any
+  rules:
+    - 'c:powershell -NoProfile -Command "if ((reg query ''HKLM\SOFTWARE\Microsoft\Office\15.0\Common\InstallRoot'' /reg:64 2>&1) -match ''InstallRoot'') {''INSTALLED''} elseif ((reg query ''HKLM\SOFTWARE\Microsoft\Office\15.0\Common\InstallRoot'' /reg:32 2>&1) -match ''InstallRoot'') {''INSTALLED''} else {''NO''}" -> r:^INSTALLED'
+
+checks:
+  - id: 61100
+    name: "Ensure Word macros are disabled or limited to digitally signed ones"
+    description: "VBAWarnings must be 3 (disable all except digitally signed macros) or 4 (disable all without notification) via policy."
+    rationale: "Malicious macros are the most common delivery vector of ransomware and infostealers through Office documents."
+    remediation: "Set 'VBA Macro Notification Settings' to 'Disable all except digitally signed macros' or 'Disable all without notification' (Microsoft Word 2013 > Application Settings > Security > Trust Center)."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Word\Security'' /v VBAWarnings /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^3|^4'
+
+  - id: 61101
+    name: "Ensure Word blocks macros from running in files from the Internet"
+    description: "blockcontentexecutionfrominternet must be 1 so macros in files carrying the Mark of the Web are blocked."
+    rationale: "Documents downloaded from the Internet or received by e-mail carry the Mark of the Web; blocking macros there removes the main phishing path."
+    remediation: "Enable 'Block macros from running in Office files from the Internet' for Word."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Word\Security'' /v blockcontentexecutionfrominternet /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^1'
+
+  - id: 61102
+    name: "Ensure Word does not trust access to the VBA object model"
+    description: "AccessVBOM must be 0."
+    rationale: "Trusted programmatic access to the VBA project lets a macro create or modify other macros, enabling self-replicating malicious code."
+    remediation: "Disable 'Trust access to the VBA project object model' for Word."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Word\Security'' /v AccessVBOM /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61103
+    name: "Ensure Protected View is not disabled for files from the Internet in Word"
+    description: "DisableInternetFilesInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for files from the Internet' setting in Word."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Word\Security\ProtectedView'' /v DisableInternetFilesInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61104
+    name: "Ensure Protected View is not disabled for Outlook attachments in Word"
+    description: "DisableAttachmentsInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for Outlook attachments' setting in Word."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Word\Security\ProtectedView'' /v DisableAttachmentsInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61105
+    name: "Ensure Protected View is not disabled for files in unsafe locations in Word"
+    description: "DisableUnsafeLocationsInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for files in unsafe locations' setting in Word."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Word\Security\ProtectedView'' /v DisableUnsafeLocationsInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61106
+    name: "Ensure Excel macros are disabled or limited to digitally signed ones"
+    description: "VBAWarnings must be 3 (disable all except digitally signed macros) or 4 (disable all without notification) via policy."
+    rationale: "Malicious macros are the most common delivery vector of ransomware and infostealers through Office documents."
+    remediation: "Set 'VBA Macro Notification Settings' to 'Disable all except digitally signed macros' or 'Disable all without notification' (Microsoft Excel 2013 > Application Settings > Security > Trust Center)."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Excel\Security'' /v VBAWarnings /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^3|^4'
+
+  - id: 61107
+    name: "Ensure Excel blocks macros from running in files from the Internet"
+    description: "blockcontentexecutionfrominternet must be 1 so macros in files carrying the Mark of the Web are blocked."
+    rationale: "Documents downloaded from the Internet or received by e-mail carry the Mark of the Web; blocking macros there removes the main phishing path."
+    remediation: "Enable 'Block macros from running in Office files from the Internet' for Excel."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Excel\Security'' /v blockcontentexecutionfrominternet /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^1'
+
+  - id: 61108
+    name: "Ensure Excel does not trust access to the VBA object model"
+    description: "AccessVBOM must be 0."
+    rationale: "Trusted programmatic access to the VBA project lets a macro create or modify other macros, enabling self-replicating malicious code."
+    remediation: "Disable 'Trust access to the VBA project object model' for Excel."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Excel\Security'' /v AccessVBOM /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61109
+    name: "Ensure Protected View is not disabled for files from the Internet in Excel"
+    description: "DisableInternetFilesInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for files from the Internet' setting in Excel."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Excel\Security\ProtectedView'' /v DisableInternetFilesInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61110
+    name: "Ensure Protected View is not disabled for Outlook attachments in Excel"
+    description: "DisableAttachmentsInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for Outlook attachments' setting in Excel."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Excel\Security\ProtectedView'' /v DisableAttachmentsInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61111
+    name: "Ensure Protected View is not disabled for files in unsafe locations in Excel"
+    description: "DisableUnsafeLocationsInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for files in unsafe locations' setting in Excel."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Excel\Security\ProtectedView'' /v DisableUnsafeLocationsInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61112
+    name: "Ensure PowerPoint macros are disabled or limited to digitally signed ones"
+    description: "VBAWarnings must be 3 (disable all except digitally signed macros) or 4 (disable all without notification) via policy."
+    rationale: "Malicious macros are the most common delivery vector of ransomware and infostealers through Office documents."
+    remediation: "Set 'VBA Macro Notification Settings' to 'Disable all except digitally signed macros' or 'Disable all without notification' (Microsoft PowerPoint 2013 > Application Settings > Security > Trust Center)."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\PowerPoint\Security'' /v VBAWarnings /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^3|^4'
+
+  - id: 61113
+    name: "Ensure PowerPoint blocks macros from running in files from the Internet"
+    description: "blockcontentexecutionfrominternet must be 1 so macros in files carrying the Mark of the Web are blocked."
+    rationale: "Documents downloaded from the Internet or received by e-mail carry the Mark of the Web; blocking macros there removes the main phishing path."
+    remediation: "Enable 'Block macros from running in Office files from the Internet' for PowerPoint."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\PowerPoint\Security'' /v blockcontentexecutionfrominternet /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^1'
+
+  - id: 61114
+    name: "Ensure PowerPoint does not trust access to the VBA object model"
+    description: "AccessVBOM must be 0."
+    rationale: "Trusted programmatic access to the VBA project lets a macro create or modify other macros, enabling self-replicating malicious code."
+    remediation: "Disable 'Trust access to the VBA project object model' for PowerPoint."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\PowerPoint\Security'' /v AccessVBOM /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61115
+    name: "Ensure Protected View is not disabled for files from the Internet in PowerPoint"
+    description: "DisableInternetFilesInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for files from the Internet' setting in PowerPoint."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\PowerPoint\Security\ProtectedView'' /v DisableInternetFilesInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61116
+    name: "Ensure Protected View is not disabled for Outlook attachments in PowerPoint"
+    description: "DisableAttachmentsInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for Outlook attachments' setting in PowerPoint."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\PowerPoint\Security\ProtectedView'' /v DisableAttachmentsInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61117
+    name: "Ensure Protected View is not disabled for files in unsafe locations in PowerPoint"
+    description: "DisableUnsafeLocationsInPV must be 0 so the document opens in Protected View."
+    rationale: "Protected View opens untrusted documents in a sandbox where active content does not run."
+    remediation: "Do not enable the 'Turn off Protected View for files in unsafe locations' setting in PowerPoint."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\PowerPoint\Security\ProtectedView'' /v DisableUnsafeLocationsInPV /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61118
+    name: "Ensure Excel does not launch DDE servers"
+    description: "DisableDDEServerLaunch must be 1."
+    rationale: "DDE lets a document start other applications and has been used to run commands without macros."
+    remediation: "Enable 'Don't allow Dynamic Data Exchange (DDE) server launch in Excel'."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Excel\Security\External Content'' /v DisableDDEServerLaunch /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^1'
+
+  - id: 61119
+    name: "Ensure Excel does not look up DDE servers"
+    description: "DisableDDEServerLookup must be 1."
+    rationale: "Same DDE abuse path as above."
+    remediation: "Enable 'Don't allow Dynamic Data Exchange (DDE) server lookup in Excel'."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Excel\Security\External Content'' /v DisableDDEServerLookup /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^1'
+
+  - id: 61120
+    name: "Ensure Word does not allow DDE"
+    description: "AllowDDE must be 0 (no DDE) or 1 (only where Office needs it), never 2."
+    rationale: "DDE fields in Word documents can run arbitrary commands."
+    remediation: "Set 'Dynamic Data Exchange' for Word to 'Don't allow DDE'."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Word\Security'' /v AllowDDE /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0|^1'
+
+  - id: 61121
+    name: "Ensure all ActiveX controls are disabled in Office"
+    description: "DisableAllActiveX must be 1."
+    rationale: "ActiveX controls in documents run native code and have a long history of exploitable flaws."
+    remediation: "Enable 'Disable All ActiveX' in the Office Trust Center."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Common\Security'' /v DisableAllActiveX /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^1'
+
+  - id: 61122
+    name: "Ensure Outlook blocks external content in HTML mail"
+    description: "BlockExtContent must be 1."
+    rationale: "External images and content are used for tracking and to confirm that a mailbox is live."
+    remediation: "Block external content in HTML e-mail in the Outlook Trust Center."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Outlook\Options\Mail'' /v BlockExtContent /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^1'
+
+  - id: 61123
+    name: "Ensure Outlook keeps level 1 (dangerous) attachments blocked"
+    description: "ShowLevel1Attach must be 0."
+    rationale: "Level 1 attachments (executables, scripts) must stay blocked."
+    remediation: "Do not enable 'Display Level 1 attachments'."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Outlook\Security'' /v ShowLevel1Attach /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61124
+    name: "Ensure Outlook prompts when a program tries to send mail"
+    description: "PromptOOMSend must be 0 (prompt the user) so programs cannot send mail silently."
+    rationale: "Object Model access to send mail is used by malware to spread through the mailbox."
+    remediation: "Set the programmatic access security setting to 'Prompt user'."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Outlook\Security'' /v PromptOOMSend /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^0'
+
+  - id: 61125
+    name: "Ensure automatic Office updates are enabled"
+    description: "EnableAutomaticUpdates must be 1."
+    rationale: "Unpatched Office installations are exploited through known vulnerabilities."
+    remediation: "Enable 'Enable Automatic Updates' in the Office Update policy."
+    compliance:
+      gdpr: ["IV_32.1.b"]
+      iso_27001: ["A.8.7", "A.8.9"]
+      nis2: ["21.2.e"]
+    references:
+      - https://learn.microsoft.com/en-us/deployoffice/security/
+    condition: all
+    rules:
+      - 'c:powershell -NoProfile -Command "$o = reg query ''HKLM\SOFTWARE\Policies\Microsoft\Office\15.0\Common\OfficeUpdate'' /v EnableAutomaticUpdates /reg:64 2>&1; if ($o -match ''REG_DWORD\s+0x([0-9a-fA-F]+)'') {[Convert]::ToInt32($matches[1],16)} else {''MISSING''}" -> r:^1'

@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "comment": "Shared by secrets_scan.py and secrets_scan.ps1. Used by the CUSTOM engine only (systems TruffleHog does not run on); detector_categories maps TruffleHog detector names to SCA check categories for both engines. Regexes must be valid in Python re and in .NET.",
+  "categories": {
+    "private_keys": "Private keys (PEM/OpenSSH/PGP) stored in files",
+    "cloud_credentials": "Cloud provider credentials (AWS, Google, Azure, ...)",
+    "service_tokens": "API and access tokens of services (GitHub, GitLab, Slack, Stripe, npm, ...)",
+    "hardcoded_credentials": "Passwords, secrets and credentials embedded in configuration files, scripts and connection strings"
+  },
+  "default_category": "service_tokens",
+  "detector_categories": [
+    ["^(PrivateKey|PGP|SSH|Ssh|Rsa|RSA)", "private_keys"],
+    ["(AWS|Aws|GCP|Gcp|Azure|GoogleCloud|GoogleOAuth|Firebase|DigitalOcean|Alibaba|Oracle|Scaleway|Linode|Vultr|IBM)", "cloud_credentials"],
+    ["^(URI|JDBC|Jdbc|MongoDB|Postgres|MySQL|Redis|LDAP|Ldap|FTP|Ftp|SQLServer|Generic|Password|BasicAuth|Salesforce|Airbrake)", "hardcoded_credentials"]
+  ],
+  "patterns": [
+    {"id": "pem-private-key", "category": "private_keys", "label": "private key block",
+     "regex": "-----BEGIN (?:RSA |DSA |EC |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----"},
+    {"id": "aws-access-key-id", "category": "cloud_credentials", "label": "AWS access key id",
+     "regex": "\\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\\b"},
+    {"id": "aws-secret-key", "category": "cloud_credentials", "label": "AWS secret access key",
+     "regex": "(?i)aws.{0,20}(?:secret|private).{0,20}[=:]\\s*[\"']?([A-Za-z0-9/+=]{40})[\"']?", "value_group": 1},
+    {"id": "google-api-key", "category": "cloud_credentials", "label": "Google API key",
+     "regex": "\\bAIza[0-9A-Za-z_\\-]{35}\\b"},
+    {"id": "gcp-service-account", "category": "cloud_credentials", "label": "GCP service account key",
+     "regex": "\"private_key_id\"\\s*:\\s*\"[0-9a-f]{40}\""},
+    {"id": "azure-storage-key", "category": "cloud_credentials", "label": "Azure storage account key",
+     "regex": "(?i)AccountKey=([A-Za-z0-9+/=]{60,})", "value_group": 1},
+    {"id": "github-token", "category": "service_tokens", "label": "GitHub token",
+     "regex": "\\bgh[pousr]_[A-Za-z0-9]{36,255}\\b"},
+    {"id": "github-fine-grained", "category": "service_tokens", "label": "GitHub fine-grained token",
+     "regex": "\\bgithub_pat_[A-Za-z0-9_]{60,}\\b"},
+    {"id": "gitlab-token", "category": "service_tokens", "label": "GitLab personal access token",
+     "regex": "\\bglpat-[A-Za-z0-9_\\-]{20,}\\b"},
+    {"id": "slack-token", "category": "service_tokens", "label": "Slack token",
+     "regex": "\\bxox[baprs]-[A-Za-z0-9\\-]{10,}\\b"},
+    {"id": "stripe-key", "category": "service_tokens", "label": "Stripe live key",
+     "regex": "\\b[sr]k_live_[0-9a-zA-Z]{24,}\\b"},
+    {"id": "sendgrid-key", "category": "service_tokens", "label": "SendGrid API key",
+     "regex": "\\bSG\\.[A-Za-z0-9_\\-]{22}\\.[A-Za-z0-9_\\-]{43}\\b"},
+    {"id": "npm-token", "category": "service_tokens", "label": "npm access token",
+     "regex": "\\bnpm_[A-Za-z0-9]{36}\\b"},
+    {"id": "jwt", "category": "service_tokens", "label": "JSON Web Token",
+     "regex": "\\beyJ[A-Za-z0-9_\\-]{10,}\\.eyJ[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}\\b"},
+    {"id": "telegram-bot", "category": "service_tokens", "label": "Telegram bot token",
+     "regex": "\\b[0-9]{8,10}:[A-Za-z0-9_\\-]{35}\\b"},
+    {"id": "credential-literal", "category": "hardcoded_credentials", "label": "hardcoded credential-like literal",
+     "regex": "(?i)(?<![a-z])(?:password|passwd|pwd|secret|client_secret|api[_-]?key|apikey|access[_-]?token|auth[_-]?token)(?![a-z])[\"']?\\s*[:=]\\s*[\"']?([^\\s\"'#<>${}]{8,})",
+     "value_group": 1, "file_extensions": [".env", ".conf", ".cfg", ".ini", ".yml", ".yaml", ".json", ".xml", ".properties", ".toml", ".sh", ".ps1", ".bat", ".cmd", ".php", ".py", ".rb", ".js", ".ts", ".cs", ".java", ".config", ".txt"],
+     "file_name_prefixes": [".env"]},
+    {"id": "uri-with-password", "category": "hardcoded_credentials", "label": "connection string with embedded password",
+     "regex": "(?i)\\b(?:postgres(?:ql)?|mysql|mongodb(?:\\+srv)?|redis|amqps?|ftp|sftp|smb)://[^\\s:/@]+:([^\\s:/@]{4,})@[^\\s/]+", "value_group": 1}
+  ],
+  "placeholders": {
+    "literals": ["password", "passwd", "secret", "changeme", "change-me", "change_me", "example", "sample", "dummy", "test", "testing", "null", "none", "true", "false", "undefined", "required", "redacted", "xxxxxxxx", "12345678", "your_password", "yourpassword"],
+    "prefixes": ["your", "<", "${", "$(", "{{", "%", "@", "example", "changeme", "placeholder", "xxx", "***", "..."],
+    "regex": "^(?:(.)\\1+|[*x.\\-_#]+)$"
+  },
+  "exclude_dir_names": ["node_modules", ".git", "proc", "sys", "dev", "__pycache__", "site-packages", "dist-packages", ".cache", ".npm", ".gradle", ".m2", "$Recycle.Bin", "WinSxS", "Windows.old"],
+  "exclude_extensions": [".png", ".jpg", ".jpeg", ".gif", ".ico", ".bmp", ".svg", ".woff", ".woff2", ".ttf", ".eot", ".mp3", ".mp4", ".avi", ".mov", ".iso", ".exe", ".dll", ".so", ".dylib", ".class", ".jar", ".war", ".pyc", ".o", ".a", ".zip", ".gz", ".tgz", ".7z", ".rar", ".bz2", ".xz", ".pdf", ".db", ".sqlite", ".mdb", ".ldf", ".mdf", ".vmdk", ".vhd", ".vhdx"]
+}
